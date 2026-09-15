@@ -1,0 +1,41 @@
+{
+  "rubbings": [
+    {
+      "id": "rubbing_demo",
+      "code": "TP-清-014",
+      "source": "地方碑刻残页",
+      "paperSize": "42x68cm",
+      "note": "边缘有旧折痕",
+      "createdAt": "2026-06-16T00:00:00.000Z"
+    }
+  ],
+  "damages": [
+    {
+      "id": "damage_demo_1",
+      "rubbingId": "rubbing_demo",
+      "position": "左上角第3列题字旁",
+      "type": "虫蛀孔",
+      "beforePhotoUrl": "https://example.local/before-014-1.jpg",
+      "afterPhotoUrl": "",
+      "status": "pending",
+      "repairNote": "",
+      "batchId": null,
+      "createdAt": "2026-06-16T00:00:00.000Z",
+      "repairedAt": null
+    },
+    {
+      "id": "damage_demo_2",
+      "rubbingId": "rubbing_demo",
+      "position": "下边缘中央",
+      "type": "撕裂",
+      "beforePhotoUrl": "https://example.local/before-014-2.jpg",
+      "afterPhotoUrl": "",
+      "status": "pending",
+      "repairNote": "",
+      "batchId": null,
+      "createdAt": "2026-06-16T00:00:00.000Z",
+      "repairedAt": null
+    }
+  ],
+  "batches": []
+}
