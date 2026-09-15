@@ -12,7 +12,8 @@ async function startServer(options = {}) {
     leaseMs: options.leaseMs,
     maxAttempts: options.maxAttempts,
     clock: options.clock,
-    crashSentinel: options.crashSentinel
+    crashSentinel: options.crashSentinel,
+    failPersistSentinel: options.failPersistSentinel
   });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   const port = server.address().port;

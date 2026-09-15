@@ -95,13 +95,17 @@ function registerImage(state, body, clock, options) {
 
 // 找下一个可认领作业：排队中，或 processing 但租约已过期（可抢占）。
 // 统一按“最早可领取时间”排序：排队作业取 createdAt，过期作业取 leaseExpiresAt。
+// 注意：attempts 已达上限的过期作业不能再被认领（否则计数会涨过上限、永远停在 processing），
+// 这类作业由 claimNextJob 在挑选前转成死信。
 function findClaimable(state, now) {
   const candidates = state.jobs
     .map((job) => {
       if (job.status === "queued") return { job, availableAt: Date.parse(job.createdAt) };
       if (job.status === "processing" && job.leaseExpiresAt) {
         const expiresAt = Date.parse(job.leaseExpiresAt);
-        if (expiresAt <= now) return { job, availableAt: expiresAt };
+        if (expiresAt <= now && job.attempts < job.maxAttempts) {
+          return { job, availableAt: expiresAt };
+        }
       }
       return null;
     })
@@ -113,8 +117,29 @@ function findClaimable(state, now) {
 function claimNextJob(state, body, clock) {
   const workerId = requireString(body, "workerId");
   const now = clock.now();
+
+  // 先“收尸”：租约过期且投递次数已用尽的 processing 作业直接转死信。
+  // 这类作业来自持有者反复超时——工作者没机会（也不应再）调 /fail，
+  // 由下一次认领动作兜底，保证用尽次数必然进死信而不是永驻 processing。
+  let buried = 0;
+  for (const job of state.jobs) {
+    if (
+      job.status === "processing" &&
+      job.attempts >= job.maxAttempts &&
+      job.leaseExpiresAt &&
+      Date.parse(job.leaseExpiresAt) <= now
+    ) {
+      job.status = "dead_letter";
+      job.deadLetteredAt = new Date(now).toISOString();
+      if (!job.lastError) job.lastError = "租约过期且投递次数已用尽，自动转死信";
+      job.workerId = null;
+      job.leaseExpiresAt = null;
+      buried += 1;
+    }
+  }
+
   const job = findClaimable(state, now);
-  if (!job) return null;
+  if (!job) return { job: null, image: null, reclaimed: false, buried };
 
   const leaseMs = Number.isFinite(body.leaseMs) && body.leaseMs > 0 ? body.leaseMs : job.leaseMs;
   const reclaimed = job.status === "processing";
@@ -126,7 +151,7 @@ function claimNextJob(state, body, clock) {
   job.lastError = null;
 
   const image = state.images.find((item) => item.id === job.imageId) || null;
-  return { job, image, reclaimed };
+  return { job, image, reclaimed, buried };
 }
 
 // 持租约校验：作业必须在 processing，且提交者是当前持有者、租约未过期。

@@ -80,7 +80,10 @@ const routes = [
 function createApp(options = {}) {
   const clock = options.clock || { now: () => Date.now() };
   const dbFile = options.dbFile || DB_FILE;
-  const store = new JsonStore(dbFile, seed(), { crashSentinel: options.crashSentinel });
+  const store = new JsonStore(dbFile, seed(), {
+    crashSentinel: options.crashSentinel,
+    failPersistSentinel: options.failPersistSentinel
+  });
   const config = {
     leaseMs: options.leaseMs || DEFAULT_LEASE_MS,
     maxAttempts: options.maxAttempts || DEFAULT_MAX_ATTEMPTS
@@ -393,13 +396,21 @@ function createApp(options = {}) {
     }
 
     // 工作者认领：同一时刻一个作业只被一个工作者持有，返回租约到期时间。
+    // 认领事务内会把过期且用尽投递次数的作业自动转死信。
     if (req.method === "POST" && pathname === "/jobs/claim") {
       const body = await parseBody(req);
       const outcome = await store.update((state) => pipeline.claimNextJob(state, body, clock));
-      if (!outcome) return send(res, 200, { claimed: false, data: null });
+      if (!outcome.job) {
+        return send(res, 200, { claimed: false, reclaimed: false, deadLettered: outcome.buried, data: null });
+      }
       // update 已落盘；再开一次只读事务补影像/结果视图。
       const data = await store.read((state) => enrichJob(state, outcome.job));
-      return send(res, 200, { claimed: true, reclaimed: outcome.reclaimed, data });
+      return send(res, 200, {
+        claimed: true,
+        reclaimed: outcome.reclaimed,
+        deadLettered: outcome.buried,
+        data
+      });
     }
 
     // /jobs/stats 必须放在 /jobs/:id 之前匹配，否则会被当成作业 id。
